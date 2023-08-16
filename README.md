@@ -1,5 +1,6 @@
-# Google Tag Manager API
+# Google Tag Manager API Scripts
 The repository contains python scripts related to [Google Tag Manager API](https://developers.google.com/tag-platform/tag-manager/api/v2).
+These scripts are helpfull if you have GTM account with multiple containers in it.
 
 ## Files
 
