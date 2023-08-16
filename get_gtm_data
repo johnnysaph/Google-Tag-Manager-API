@@ -53,8 +53,9 @@ for container in tqdm(containers):
     gtm_data[container_id]["tags"] = tags
     gtm_data[container_id]["variables"] = variables
     logging.warning("{} is done!".format(container_id))
-    
-with open("gtm_data.json", "w") as f:
+
+path_to_result_json = <path to result json file>
+with open(path_to_result_json, "w") as f:
     json.dump(gtm_data, f)
     
 logging.warning("Script finished.")
