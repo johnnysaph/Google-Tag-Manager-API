@@ -12,10 +12,11 @@ def get_default_workspace_path(workspaces):
             return w["path"]
         
 # Configure the logging
+path_to_log_file = '<path to log file>'
 logging.basicConfig(
     level = logging.WARNING,
     format   = "[%(asctime)s] FILE: %(filename)-25s LINE: #%(lineno)d | %(levelname)-8s | %(message)s",
-    filename = '<path to log file>'
+    filename = path_to_log_file
 )
 
 logging.warning("Script started.")
