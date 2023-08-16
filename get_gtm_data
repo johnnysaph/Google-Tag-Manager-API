@@ -1,0 +1,60 @@
+from apiclient.discovery import build
+from tqdm import tqdm
+import pandas as pd
+import os
+import time
+import json
+import logging
+
+def get_default_workspace_path(workspaces):
+    for w in workspaces:
+        if w["name"] == 'Default Workspace':
+            return w["path"]
+        
+# Configure the logging
+logging.basicConfig(
+    level = logging.WARNING,
+    format   = "[%(asctime)s] FILE: %(filename)-25s LINE: #%(lineno)d | %(levelname)-8s | %(message)s",
+    filename = <path to lof file>
+)
+
+logging.warning("Script started.")
+
+path_to_config = <path to config json file>
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path_to_config
+
+gtm = build('tagmanager', 'v2')
+account_id = <account id>
+account_path = "accounts/{account_id}".format(account_id=account_id)
+containers = gtm.accounts().containers().list(parent=account_path).execute()
+containers = containers["container"]
+gtm_data = {}
+
+for container in tqdm(containers):
+    time.sleep(5)
+    container_path = container["path"]
+    container_id = container["publicId"]
+    gtm_data[container_id] = {}
+    # get default workspace
+    workspaces = gtm.accounts().containers().workspaces().list(parent=container_path).execute()
+    workspace_path = get_default_workspace_path(workspaces['workspace'])
+    # get tags
+    tags = gtm.accounts().containers().workspaces().tags().list(parent=workspace_path).execute()
+    if "tag" in tags:
+        tags = tags["tag"]
+    else:
+        tags = []
+    # get vars
+    variables = gtm.accounts().containers().workspaces().variables().list(parent = workspace_path).execute()
+    if "variable" in variables:
+        variables = variables['variable']
+    else:
+        variables = []
+    gtm_data[container_id]["tags"] = tags
+    gtm_data[container_id]["variables"] = variables
+    logging.warning("{} is done!".format(container_id))
+    
+with open("gtm_data.json", "w") as f:
+    json.dump(gtm_data, f)
+    
+logging.warning("Script finished.")
