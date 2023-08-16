@@ -1,0 +1,109 @@
+from apiclient.discovery import build
+from tqdm import tqdm
+import pandas as pd
+import ast
+import os
+import time
+import json
+import logging
+import time
+
+def get_default_workspace_path(workspaces):
+    for w in workspaces:
+        if w["name"] == 'Default Workspace':
+            return w["path"]
+        
+def get_processed_gtm_ids():
+    path_to_log = '<path to log file>'
+    with open(path_to_log, 'r') as f:
+        logs = [i.strip() for i in f.readlines()]
+    gtm_ids = []
+    for log in logs:
+        if log.endswith(" is done!"):
+            gtm_id = log.split()[-3]
+            gtm_ids.append(gtm_id)
+    return set(gtm_ids)
+        
+# Configure the logging
+logging.basicConfig(
+    level = logging.WARNING,
+    format   = "[%(asctime)s] FILE: %(filename)-25s LINE: #%(lineno)d | %(levelname)-8s | %(message)s",
+    filename = '<path to log file>'
+)
+
+logging.warning("Script started.")
+
+path_to_config = '<path to config json file>'
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path_to_config
+account_id = '<account id'
+workspace_name = "to pause tags from file"
+new_version_name = "to pause tags from file"
+
+# excel file with known tags to delete
+path_to_file_with_tags = '<path excel file with tags>'
+tags_to_del = pd.read_excel(path_to_file_with_tags)
+
+# set connection to api
+gtm = build('tagmanager', 'v2')
+
+# get all 500 gtm containers
+account_path = "accounts/{account_id}".format(account_id=account_id)
+containers_resp = gtm.accounts().containers().list(parent=account_path).execute()
+containers = containers_resp["container"]
+container_to_path = {c["publicId"]: c["path"] for c in containers}
+
+processed_gtm_ids = get_processed_gtm_ids()
+
+for contaner_id, contaner_df in tqdm(tags_to_del.groupby('gtm id')):
+    if contaner_id in processed_gtm_ids:
+        continue
+    logging.warning("{} is in queue!".format(contaner_id))
+    container_path = container_to_path[contaner_id]
+    tags_to_delete_names = set(contaner_df["tag name"])
+    
+    # get default workspace path
+    workspaces = gtm.accounts().containers().workspaces().list(parent=container_path).execute()
+    default_workspace_path = get_default_workspace_path(workspaces['workspace'])
+    
+    # creating new workspace
+    new_workspace = gtm.accounts().containers().workspaces().create(parent=container_path, body = {"name": workspace_name}).execute()
+    workspace_path = new_workspace["path"]
+       
+    # getting the tags
+    tags_resp = gtm.accounts().containers().workspaces().tags().list(parent=workspace_path).execute()
+    if "tag" in tags_resp:
+        tags = tags_resp['tag']
+    else:
+        # no active tags to delete
+        logging.warning("No active tags in {}!".format(contaner_id))
+        logging.warning("{} is done!".format(contaner_id))
+        continue
+    
+    for tag in tags:
+        if tag['name'] in tags_to_delete_names:
+            if 'firingTriggerId' not in tag:
+                logging.warning("There is no trigger in {} tag. Container id is: {}".format(tag["name"], contaner_id))
+            else:
+                tag_path = tag["path"]
+                body = {
+                    "paused": True,
+                    "name": tag["name"],
+                    "type": tag["type"],
+                    "parameter": tag["parameter"],
+                    "firingTriggerId": tag["firingTriggerId"]
+                }
+                gtm.accounts().containers().workspaces().tags().update(path=tag_path,body=body).execute()
+                logging.warning("The {} tag is paused".format(tag["name"]))
+                                     
+    # publishing new version of container
+    new_version = gtm.accounts().containers().workspaces().create_version(path=workspace_path, body = {"name": new_version_name}).execute()
+    new_version_path = new_version['containerVersion']['path']
+    published = gtm.accounts().containers().versions().publish(path=new_version_path).execute()
+    
+    # sync with default workspace
+    synced = gtm.accounts().containers().workspaces().sync(path=default_workspace_path).execute()
+    
+    logging.warning("{} is done!".format(contaner_id))
+    time.sleep(5)
+    
+logging.warning("Script finished.")
